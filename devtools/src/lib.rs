@@ -53,7 +53,7 @@
 //!
 //! use leptos_query_devtools::LeptosQueryDevtools;
 //! use leptos_query::provide_query_client;
-//! use leptos::*;
+//! use leptos::prelude::*;
 //!
 //! #[component]
 //! fn App() -> impl IntoView {
@@ -69,7 +69,7 @@
 //!
 //! Now you should be able to see the devtools mounted to the bottom right of your app!
 
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 pub fn LeptosQueryDevtools() -> impl IntoView {

@@ -89,7 +89,7 @@ In the root of your App, provide a query client with [provide_query_client] or [
 
 ```rust
 use leptos_query::*;
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -103,7 +103,7 @@ pub fn App() -> impl IntoView {
 Then make a query function with [`create_query`][crate::create_query::create_query()]
 
 ```rust
-use leptos::*;
+use leptos::prelude::*;
 use leptos_query::*;
 
 
@@ -135,7 +135,7 @@ async fn get_track(id: TrackId) -> TrackData {
 Now you can use the query in any component in your app.
 
 ```rust
-use leptos::*;
+use leptos::prelude::*;
 use leptos_query::*;
 
 #[component]
@@ -202,7 +202,7 @@ Devtools will by default only show in development mode. It will not be shown, or
 
 use leptos_query_devtools::LeptosQueryDevtools;
 use leptos_query::*;
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 fn App() -> impl IntoView {

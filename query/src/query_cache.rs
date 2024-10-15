@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use leptos::*;
+use leptos::prelude::*;
 use slotmap::SlotMap;
 
 use crate::{
@@ -219,7 +219,7 @@ impl QueryCache {
         let client = self.clone();
 
         // This memo is crucial to avoid crazy amounts of lookups.
-        create_memo(move |_| {
+        Memo::new(move |_| {
             let key = key();
             client.get_or_create_query(key)
         })
@@ -230,7 +230,7 @@ impl QueryCache {
             if #[cfg(debug_assertions)] {
                 let size_signal = self.size;
                 let cache = self.cache.clone();
-                create_memo(move |_| {
+                Memo::new(move |_| {
                     let size = size_signal.get();
                     let cache = RefCell::try_borrow(&cache).expect("size borrow");
                     let real_size: usize = cache.values().map(|b| b.size()).sum();

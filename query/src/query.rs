@@ -7,7 +7,7 @@ use std::{
 };
 
 use futures_channel::oneshot;
-use leptos::*;
+use leptos::{prelude::*, spawn::spawn_local};
 
 use crate::{
     garbage_collector::GarbageCollector,
@@ -252,7 +252,7 @@ where
         if let Some(current_request) = self.current_request.take() {
             let cancellation = current_request.send(());
             if cancellation.is_err() {
-                logging::error!("Failed to cancel request {:?}", self.key);
+                logging::console_error(&format!("Failed to cancel request {:?}", self.key));
             }
             cancellation.is_ok()
         } else {
@@ -310,7 +310,7 @@ where
     pub fn dispose(&self) {
         #[cfg(debug_assertions)]
         if !self.observers.borrow().is_empty() {
-            logging::debug_warn!("Query has active observers");
+            logging::console_debug_warn("Query has active observers");
         }
     }
 }
@@ -361,7 +361,7 @@ where
                         }
                     }
                     QueryState::Loading | QueryState::Fetching(_) => {
-                        logging::debug_warn!("Query is already loading, this is likely a bug.");
+                        logging::console_debug_warn("Query is already loading, this is likely a bug.");
                         debug_assert!(false, "Query is already loading, this is likely a bug.");
                     }
                 }
@@ -387,7 +387,7 @@ where
         Either::Left((result, _)) => Ok(result),
         Either::Right((cancelled, _)) => {
             if let Err(_) = cancelled {
-                logging::debug_warn!("Query cancellation was incorrectly dropped.");
+                logging::console_debug_warn("Query cancellation was incorrectly dropped.");
             }
 
             Err(())

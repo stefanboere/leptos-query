@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_query::{provide_query_client_with_options, DefaultQueryOptions};
 use leptos_query_devtools::LeptosQueryDevtools;

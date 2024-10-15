@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 use start_csr::App;
 
 fn main() {

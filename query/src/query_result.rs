@@ -1,11 +1,11 @@
 use crate::QueryState;
-use leptos::*;
+use leptos::prelude::*;
 
 /// Reactive query result.
 #[derive(Clone)]
 pub struct QueryResult<V, R>
 where
-    V: 'static,
+    V: Send + Sync + 'static,
     R: RefetchFn,
 {
     /// The current value of the query. None if it has not been fetched yet.

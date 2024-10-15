@@ -121,7 +121,7 @@ impl<V> QueryOptions<V> {
 impl<V> Default for QueryOptions<V> {
     fn default() -> Self {
         // Use cache wide defaults if they exist.
-        let default_options = leptos::use_context::<crate::QueryClient>()
+        let default_options = leptos::prelude::use_context::<crate::QueryClient>()
             .map(|c| c.default_options)
             .unwrap_or_default();
         Self {
@@ -286,8 +286,6 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let _ = leptos::create_runtime();
-
         provide_query_client_with_options(DefaultQueryOptions {
             stale_time: Some(Duration::from_secs(1)),
             gc_time: Some(Duration::from_secs(2)),

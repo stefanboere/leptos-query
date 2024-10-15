@@ -53,7 +53,7 @@ Then in your app, render the devtools component. Make sure you also provide the 
 
 use leptos_query_devtools::LeptosQueryDevtools;
 use leptos_query::provide_query_client;
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 fn App() -> impl IntoView {

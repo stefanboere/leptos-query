@@ -1,5 +1,5 @@
 use app::*;
-use leptos::*;
+use leptos::prelude::*;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]

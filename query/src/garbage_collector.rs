@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc, time::Duration};
 
-use leptos::{leptos_dom::helpers::TimeoutHandle, *};
+use leptos::{leptos_dom::helpers::TimeoutHandle, prelude::*};
 
 use crate::query::Query;
 

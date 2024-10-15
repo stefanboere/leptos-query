@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use leptos::*;
+use leptos::prelude::*;
 use leptos_meta::Html;
 use leptos_query::query_persister::{IndexedDbPersister, LocalStoragePersister};
 use leptos_query::use_query_client;

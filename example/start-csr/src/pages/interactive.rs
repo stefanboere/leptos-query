@@ -1,6 +1,6 @@
 use std::{cell::RefCell, time::Duration};
 
-use leptos::*;
+use leptos::prelude::*;
 use leptos_query::{create_query, QueryOptions, QueryScope};
 use serde::{Deserialize, Serialize};
 

@@ -15,7 +15,6 @@ fn local_storage() -> Option<web_sys::Storage> {
     LOCAL_STORAGE.with(Clone::clone)
 }
 #[cfg(any(feature = "hydrate", feature = "csr"))]
-#[async_trait(?Send)]
 impl QueryPersister for LocalStoragePersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         if let Some(storage) = local_storage() {
@@ -47,7 +46,6 @@ impl QueryPersister for LocalStoragePersister {
 }
 
 #[cfg(not(any(feature = "hydrate", feature = "csr")))]
-#[async_trait(?Send)]
 impl QueryPersister for LocalStoragePersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         let _ = key;

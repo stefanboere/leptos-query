@@ -90,7 +90,7 @@
 //!
 //! ```rust
 //! use leptos_query::*;
-//! use leptos::*;
+//! use leptos::prelude::*;
 //!
 //! #[component]
 //! pub fn App() -> impl IntoView {
@@ -104,7 +104,7 @@
 //! Then make a query function with [`create_query`][crate::create_query::create_query()]
 //!
 //! ```
-//! use leptos::*;
+//! use leptos::prelude::*;
 //! use leptos_query::*;
 //!
 //!
@@ -158,7 +158,7 @@
 //! #    todo!()
 //! # }
 //! #
-//! use leptos::*;
+//! use leptos::prelude::*;
 //! use leptos_query::*;
 //!
 //! #[component]
@@ -225,7 +225,7 @@
 //!
 //! use leptos_query_devtools::LeptosQueryDevtools;
 //! use leptos_query::*;
-//! use leptos::*;
+//! use leptos::prelude::*;
 //!
 //! #[component]
 //! fn App() -> impl IntoView {

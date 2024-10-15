@@ -6,7 +6,7 @@ use std::cell::Cell;
 ///
 /// Example for `generate_route_list`
 /// ```
-/// use leptos::*;
+/// use leptos::prelude::*;
 /// use leptos_query::*;
 /// use leptos_axum::*;
 ///
@@ -34,7 +34,7 @@ pub fn suppress_query_load(suppress: bool) {
 ///
 /// Example for `generate_route_list`
 /// ```
-/// use leptos::*;
+/// use leptos::prelude::*;
 /// use leptos_query::*;
 /// use leptos_axum::*;
 ///

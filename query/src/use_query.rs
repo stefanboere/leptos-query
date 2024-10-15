@@ -5,7 +5,7 @@ use crate::{
     query_is_suppressed, use_query_client, QueryOptions, QueryState, RefetchFn, ResourceOption,
 };
 use leptos::leptos_dom::HydrationCtx;
-use leptos::*;
+use leptos::prelude::*;
 use std::cell::Cell;
 use std::future::Future;
 use std::rc::Rc;
@@ -24,7 +24,7 @@ use std::time::Duration;
 ///
 /// Example
 /// ```
-/// use leptos::*;
+/// use leptos::prelude::*;
 /// use leptos_query::*;
 /// use std::time::Duration;
 /// use serde::*;
@@ -95,13 +95,13 @@ where
     let resource: Resource<Query<K, V>, ResourceData<V>> = {
         let default = options.default_value;
         match options.resource_option.unwrap_or_default() {
-            ResourceOption::NonBlocking => create_resource_with_initial_value(
+            ResourceOption::NonBlocking => Resource::new_with_options(
                 move || query.get(),
                 resource_fetcher,
                 default.map(|default| ResourceData(Some(default))),
             ),
             ResourceOption::Blocking => {
-                create_blocking_resource(move || query.get(), resource_fetcher)
+                Resource::new_blocking(move || query.get(), resource_fetcher)
             }
             ResourceOption::Local => create_local_resource_with_initial_value(
                 move || query.get(),
@@ -112,7 +112,7 @@ where
     };
 
     // Ensure latest data in resource.
-    create_isomorphic_effect(move |_| {
+    Effect::new_isomorphic(move |_| {
         query_state.track();
         // If query is supressed, we have to make sure we don't refetch to avoid calling spawn_local.
         if !query_is_suppressed() {
@@ -179,7 +179,7 @@ async fn sleep(duration: Duration) {
             tokio::time::sleep(duration).await;
         } else {
             let _ = duration;
-            logging::debug_warn!("You are missing a Cargo feature for leptos_query. Please enable one of 'ssr', 'hydrate', or 'csr'.");
+            logging::console_debug_warn("You are missing a Cargo feature for leptos_query. Please enable one of 'ssr', 'hydrate', or 'csr'.");
         }
     }
 }
@@ -226,7 +226,7 @@ where
     ));
     let listener = Rc::new(Cell::new(None::<ListenerKey>));
 
-    create_isomorphic_effect({
+    Effect::new_isomorphic({
         let observer = observer.clone();
         let listener = listener.clone();
         move |_| {
@@ -248,7 +248,7 @@ where
     on_cleanup(move || {
         if let Some(listener_id) = listener.take() {
             if !observer.remove_listener(listener_id) {
-                logging::debug_warn!("Failed to remove listener.");
+                logging::console_debug_warn("Failed to remove listener.");
             }
         }
         observer.cleanup()

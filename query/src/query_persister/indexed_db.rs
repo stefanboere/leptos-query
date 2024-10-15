@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use super::{PersistQueryData, QueryPersister};
 
 #[cfg(any(feature = "hydrate", feature = "csr"))]
@@ -54,7 +52,6 @@ impl IndexedDbPersister {
 }
 
 #[cfg(any(feature = "hydrate", feature = "csr"))]
-#[async_trait(?Send)]
 impl QueryPersister for IndexedDbPersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         use js_sys::wasm_bindgen::JsValue;
@@ -146,7 +143,6 @@ impl QueryPersister for IndexedDbPersister {
 }
 
 #[cfg(not(any(feature = "hydrate", feature = "csr")))]
-#[async_trait(?Send)]
 impl QueryPersister for IndexedDbPersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         let _ = self.database_name;

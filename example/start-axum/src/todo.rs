@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 use leptos_query::*;
 use leptos_router::ActionForm;
 use std::time::Duration;

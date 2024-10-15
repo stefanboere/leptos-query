@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 use leptos_query::{
     cache_observer::{
         CacheEvent, CacheObserver, CreatedQuery, ObserverAdded, QueryCacheKey, SerializedQuery,
@@ -12,9 +12,9 @@ use crate::timeout::{time_until_stale, use_timeout};
 
 #[component]
 pub(crate) fn InnerDevtools() -> impl IntoView {
-    let mounted = create_rw_signal(false);
+    let mounted = RwSignal::new(false);
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         mounted.set(true);
     });
 
@@ -35,7 +35,7 @@ fn DevtoolsClient() -> impl IntoView {
     provide_context(state);
 
     // Ensure that selected query is closed if it is evicted.
-    create_effect({
+    Effect::new({
         move |_| {
             let context = use_devtools_context();
 

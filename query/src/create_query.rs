@@ -2,7 +2,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::{borrow::Borrow, future::Future};
 
-use leptos::Signal;
+use leptos::prelude::Signal;
 
 use crate::{
     use_query, use_query_client, QueryKey, QueryOptions, QueryResult, QueryState, QueryValue,
@@ -24,7 +24,7 @@ use crate::{
 ///
 /// ```
 /// use leptos_query::*;
-/// use leptos::*;
+/// use leptos::prelude::*;
 ///
 /// #[component]
 /// pub fn App() -> impl IntoView {

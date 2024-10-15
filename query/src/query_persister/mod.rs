@@ -1,10 +1,9 @@
-use async_trait::async_trait;
+
 
 use crate::cache_observer::{CacheEvent, CacheObserver};
 
 /// A utility for client side query persistance
 // Futures produced by the trait methods do not have to be Send, because everything is single threaded.
-#[async_trait(?Send)]
 pub trait QueryPersister {
     /// Persist a query to the persister
     async fn persist(&self, key: &str, query: PersistQueryData);
@@ -71,7 +70,7 @@ impl<V> TryFrom<PersistQueryData> for crate::QueryData<V>
 where
     V: crate::QueryValue,
 {
-    type Error = leptos::SerializationError;
+    type Error = leptos::prelude::ServerFnError;
 
     fn try_from(value: PersistQueryData) -> Result<Self, Self::Error> {
         let data = leptos::Serializable::de(value.value.as_str())?;

@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 pub fn Header(#[prop(optional, into)] title: String, children: ChildrenFn) -> impl IntoView {

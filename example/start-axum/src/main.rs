@@ -2,7 +2,7 @@
 #[tokio::main]
 async fn main() {
     use axum::{routing::post, Router};
-    use leptos::*;
+    use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use leptos_query::with_query_suppression;
     use start_axum::app::*;

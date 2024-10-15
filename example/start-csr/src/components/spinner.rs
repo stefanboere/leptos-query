@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 
 #[component]
 pub fn Spinner(#[prop(into)] fetching: Signal<bool>) -> impl IntoView {

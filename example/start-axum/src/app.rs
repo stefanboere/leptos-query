@@ -2,7 +2,7 @@ use crate::{
     error_template::{AppError, ErrorTemplate},
     todo::InteractiveTodo,
 };
-use leptos::*;
+use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_query::{query_persister, *};
 use leptos_query_devtools::LeptosQueryDevtools;

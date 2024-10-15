@@ -1,5 +1,5 @@
 use crate::{query_observer::ListenerKey, *};
-use leptos::*;
+use leptos::prelude::*;
 use std::{borrow::Borrow, cell::Cell, collections::HashMap, future::Future, rc::Rc};
 
 use self::{
@@ -132,7 +132,7 @@ impl QueryClient {
         let size = self.size();
 
         // // Memoize state to avoid unnecessary hashmap lookups.
-        let maybe_query = create_memo(move |_| {
+        let maybe_query = Memo::new(move |_| {
             let key = key();
             // Subscribe to inserts/deletions.
             size.track();
@@ -148,7 +148,7 @@ impl QueryClient {
 
         let listener = Rc::new(Cell::new(None::<ListenerKey>));
 
-        create_isomorphic_effect({
+        Effect::new_isomorphic({
             move |_| {
                 // Ensure listener is set.
                 if listener.get().is_none() {
@@ -286,7 +286,7 @@ impl QueryClient {
     /// Example:
     ///
     /// ```
-    /// use leptos::*;
+    /// use leptos::prelude::*;
     /// use leptos_query::*;
     ///
     /// fn invalidate() {
@@ -305,7 +305,7 @@ impl QueryClient {
     ///
     /// Example:
     /// ```
-    /// use leptos::*;
+    /// use leptos::prelude::*;
     /// use leptos_query::*;
     ///
     /// fn invalidate() {
@@ -402,7 +402,7 @@ impl QueryClient {
                 }
                 None => {
                     if let Some(result) = updater(None) {
-                        let query = with_owner(owner, || Query::new(key));
+                        let query = Owner::new_root(owner).with(|| Query::new(key));
                         query.set_state(QueryState::Loaded(QueryData::now(result)));
                         Some(query)
                     } else {
@@ -496,8 +496,6 @@ mod tests {
 
     #[test]
     fn update_query_data() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -537,8 +535,6 @@ mod tests {
 
     #[test]
     fn set_query_data_new_query() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -563,8 +559,6 @@ mod tests {
 
     #[test]
     fn set_query_data_existing_query() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -592,8 +586,6 @@ mod tests {
 
     #[test]
     fn can_use_same_key_with_different_value_types() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -606,14 +598,12 @@ mod tests {
 
     #[test]
     fn can_invalidate_while_subscribed() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
         let subscription = client.get_query_state::<u32, u32>(|| 0_u32);
 
-        create_isomorphic_effect(move |_| {
+        Effect::new_isomorphic(move |_| {
             subscription.track();
         });
 
@@ -630,8 +620,6 @@ mod tests {
 
     #[test]
     fn can_invalidate_multiple() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -647,8 +635,6 @@ mod tests {
 
     #[test]
     fn can_invalidate_multiple_strings() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -668,8 +654,6 @@ mod tests {
 
     #[test]
     fn invalidate_all() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -710,8 +694,6 @@ mod tests {
 
     #[test]
     fn can_invalidate_subset() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
@@ -735,8 +717,6 @@ mod tests {
 
     #[test]
     fn update_query_data_mut() {
-        let _ = create_runtime();
-
         provide_query_client();
         let client = use_query_client();
 
