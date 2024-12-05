@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use leptos_query::*;
-use leptos_router::ActionForm;
+use leptos::form::ActionForm;
+use leptos::logging;
 use std::time::Duration;
 
 use serde::*;
@@ -29,11 +30,11 @@ pub fn InteractiveTodo() -> impl IntoView {
 
 #[component]
 fn TodoWithResource() -> impl IntoView {
-    let (todo_id, set_todo_id) = create_signal(TodoId(0));
+    let (todo_id, set_todo_id) = signal(TodoId(0));
 
     // todo_id is a Signal<String>, and that is fed into the resource fetcher function.
     // any time todo_id changes, the resource will re-execute.
-    let todo_resource: Resource<TodoId, TodoResponse> = create_resource(todo_id, get_todo);
+    let todo_resource: Resource<TodoResponse> = Resource::new(todo_id, get_todo);
 
     view! {
         <div
@@ -78,7 +79,7 @@ fn TodoWithResource() -> impl IntoView {
 
 #[component]
 fn TodoWithQuery() -> impl IntoView {
-    let (todo_id, set_todo_id) = create_signal(TodoId(0));
+    let (todo_id, set_todo_id) = signal(TodoId(0));
 
     let QueryResult { data, .. } = todo_query().use_query(move || todo_id.get());
 
@@ -156,7 +157,7 @@ fn AllTodos() -> impl IntoView {
 
     let todos: Signal<Vec<Todo>> = Signal::derive(move || data.get().unwrap_or_default());
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let state = state.get();
         let log = match state {
             QueryState::Created => "created",
@@ -168,7 +169,7 @@ fn AllTodos() -> impl IntoView {
         logging::log!("STATE: {log}")
     });
 
-    let delete_todo = create_action(move |id: &TodoId| {
+    let delete_todo = Action::new(move |id: &TodoId| {
         let id = *id;
         let refetch = refetch.clone();
 
@@ -216,7 +217,7 @@ fn AllTodos() -> impl IntoView {
                                     <span>{todo.content}</span>
                                     <span>" "</span>
                                     <button on:click=move |_| {
-                                        delete_todo.dispatch(todo.id)
+                                        delete_todo.dispatch(todo.id);
                                     }>"X"</button>
                                 </li>
                             }
@@ -231,14 +232,14 @@ fn AllTodos() -> impl IntoView {
 
 #[component]
 fn AddTodoComponent() -> impl IntoView {
-    let add_todo = create_server_action::<AddTodo>();
+    let add_todo = ServerAction::<AddTodo>::new();
 
     let response = add_todo.value();
 
     let todo_query = todo_query();
     let all_todos = all_todos_query();
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         // If action is successful.
         if let Some(Ok(todo)) = response.get() {
             all_todos.cancel_query(AllTodosTag);

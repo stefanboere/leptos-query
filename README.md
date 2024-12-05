@@ -54,6 +54,7 @@ The table below shows the compatible versions of `leptos_query` for each `leptos
 
 | `leptos` version | `leptos_query` version |
 |------------------|------------------------|
+| 0.7.*            | 0.6.*                  |
 | 0.6.*            | 0.5.* or 0.4.*         |
 | 0.5.*            | 0.3.*                  |
 

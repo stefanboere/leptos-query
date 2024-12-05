@@ -21,7 +21,7 @@ pub fn QueryVsResource() -> impl IntoView {
 
 #[component]
 fn SingleQuery() -> impl IntoView {
-    let post_id = create_rw_signal(1_u32);
+    let post_id = RwSignal::new(1_u32);
 
     let query = post_query().use_query(move || PostQueryKey(post_id.get()));
 
@@ -138,7 +138,7 @@ const HEADER_CLASS: &str = "scroll-m-20 text-4xl font-bold tracking-tight";
 
 #[component]
 fn SingleResource() -> impl IntoView {
-    let post_id = create_rw_signal(1_u32);
+    let post_id = RwSignal::new(1_u32);
 
     let resource = create_local_resource(post_id, get_post);
 

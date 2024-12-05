@@ -3,11 +3,32 @@ use crate::{
     todo::InteractiveTodo,
 };
 use leptos::prelude::*;
+use leptos::logging;
+use leptos::task::spawn_local;
 use leptos_meta::*;
 use leptos_query::{query_persister, *};
 use leptos_query_devtools::LeptosQueryDevtools;
-use leptos_router::{Outlet, Route, Router, Routes};
+use leptos_router::path;
+use leptos_router::components::{Outlet, Route, Router, Routes, ParentRoute};
 use std::time::Duration;
+
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <AutoReload options=options.clone() />
+                <HydrationScripts options/>
+                <MetaTags/>
+            </head>
+            <body>
+                <App/>
+            </body>
+        </html>
+    }
+}
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -23,15 +44,15 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/start-axum.css"/>
         <Title text="Welcome to Leptos"/>
         <LeptosQueryDevtools/>
-        <Router fallback=|| {
-            let mut outside_errors = Errors::default();
-            outside_errors.insert_with_default_key(AppError::NotFound);
-            view! { <ErrorTemplate outside_errors/> }.into_view()
-        }>
+        <Router>
             <main>
-                <Routes>
-                    <Route
-                        path=""
+                <Routes fallback=|| {
+                    let mut outside_errors = Errors::default();
+                    outside_errors.insert_with_default_key(AppError::NotFound);
+                    view! { <ErrorTemplate outside_errors/> }.into_view()
+                }>
+                    <ParentRoute
+                        path=path!("")
                         view=|| {
                             view! {
                                 <div id="simple" style:width="50rem" style:margin="auto">
@@ -42,55 +63,55 @@ pub fn App() -> impl IntoView {
                     >
 
                         <Route
-                            path="/"
+                            path=path!("/")
                             view=|| {
                                 view! { <HomePage/> }
                             }
                         />
 
                         <Route
-                            path="single"
+                            path=path!("single")
                             view=|| {
                                 view! { <OnePost/> }
                             }
                         />
 
                         <Route
-                            path="multi"
+                            path=path!("multi")
                             view=|| {
                                 view! { <MultiPost/> }
                             }
                         />
 
                         <Route
-                            path="reactive"
+                            path=path!("reactive")
                             view=|| {
                                 view! { <ReactivePost/> }
                             }
                         />
 
                         <Route
-                            path="unique"
+                            path=path!("unique")
                             view=|| {
                                 view! { <UniqueKeyExample/> }
                             }
                         />
 
                         <Route
-                            path="refetch"
+                            path=path!("refetch")
                             view=|| {
                                 view! { <RefetchInterval/> }
                             }
                         />
 
                         <Route
-                            path="todos"
+                            path=path!("todos")
                             view=|| {
                                 view! { <InteractiveTodo/> }
                             }
                         />
 
-                    </Route>
+                    </ParentRoute>
                 </Routes>
             </main>
         </Router>
@@ -160,7 +181,6 @@ fn post_query() -> QueryScope<PostKey, Option<String>> {
     leptos_query::create_query(
         |id| async move { get_post(id).await.ok() },
         QueryOptions {
-            default_value: None,
             refetch_interval: None,
             resource_option: Some(ResourceOption::NonBlocking),
             stale_time: Some(Duration::from_secs(5)),
@@ -201,7 +221,7 @@ fn MultiPost() -> impl IntoView {
 }
 
 #[component]
-fn Post(#[prop(into)] post_id: MaybeSignal<PostKey>) -> impl IntoView {
+fn Post(#[prop(into)] post_id: Signal<PostKey>) -> impl IntoView {
     let QueryResult {
         data,
         state,
@@ -209,7 +229,7 @@ fn Post(#[prop(into)] post_id: MaybeSignal<PostKey>) -> impl IntoView {
         ..
     } = post_query().use_query(post_id);
 
-    create_effect(move |_| logging::log!("State: {:#?}", state.get()));
+    Effect::new(move |_| logging::log!("State: {:#?}", state.get()));
 
     view! {
         <div class="container">
@@ -246,7 +266,7 @@ fn Post(#[prop(into)] post_id: MaybeSignal<PostKey>) -> impl IntoView {
 
 #[component]
 fn ReactivePost() -> impl IntoView {
-    let (post_id, set_post_id) = create_signal(PostKey(1));
+    let (post_id, set_post_id) = signal(PostKey(1));
 
     view! {
         <Post post_id=post_id/>
@@ -321,7 +341,7 @@ fn RefetchInterval() -> impl IntoView {
         },
     );
 
-    create_effect(move |_| logging::log!("State: {:#?}", state.get()));
+    Effect::new(move |_| logging::log!("State: {:#?}", state.get()));
 
     view! {
         <div class="container">

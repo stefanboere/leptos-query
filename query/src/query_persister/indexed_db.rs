@@ -1,4 +1,5 @@
 use super::{PersistQueryData, QueryPersister};
+use async_trait::async_trait;
 
 #[cfg(any(feature = "hydrate", feature = "csr"))]
 use async_cell::unsync::AsyncCell;
@@ -45,13 +46,14 @@ impl IndexedDbPersister {
                 persister.set_up_db().await;
             }
         };
-        leptos::spawn_local(async move {
+        leptos::task::spawn_local(async move {
             let _ = db.await;
         })
     }
 }
 
 #[cfg(any(feature = "hydrate", feature = "csr"))]
+#[async_trait(?Send)]
 impl QueryPersister for IndexedDbPersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         use js_sys::wasm_bindgen::JsValue;
@@ -143,6 +145,7 @@ impl QueryPersister for IndexedDbPersister {
 }
 
 #[cfg(not(any(feature = "hydrate", feature = "csr")))]
+#[async_trait(?Send)]
 impl QueryPersister for IndexedDbPersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         let _ = self.database_name;
@@ -207,15 +210,15 @@ impl IndexedDbPersister {
         db_req.await.expect("Database open request")
     }
 
-    fn to_json_string<T: miniserde::Serialize>(value: &T) -> js_sys::wasm_bindgen::JsValue {
-        let string = miniserde::json::to_string(value);
+    fn to_json_string<T: serde::Serialize>(value: &T) -> js_sys::wasm_bindgen::JsValue {
+        let string = serde_json::to_string(value).expect("to json string");
         js_sys::wasm_bindgen::JsValue::from_str(&string)
     }
 
-    fn from_json_string<T: miniserde::Deserialize>(
+    fn from_json_string<T: for<'a> serde::Deserialize<'a>>(
         value: &js_sys::wasm_bindgen::JsValue,
     ) -> Option<T> {
         let value = value.as_string()?;
-        miniserde::json::from_str(value.as_str()).ok()
+        serde_json::from_str(value.as_str()).ok()
     }
 }

@@ -4,12 +4,12 @@ use crate::query_result::QueryResult;
 use crate::{
     query_is_suppressed, use_query_client, QueryOptions, QueryState, RefetchFn, ResourceOption,
 };
-use leptos::leptos_dom::HydrationCtx;
+// TODO use leptos::leptos_dom::HydrationCtx;
 use leptos::prelude::*;
-use std::cell::Cell;
+use leptos::logging;
 use std::future::Future;
-use std::rc::Rc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use serde::{Serialize, Deserialize};
 
 /// Creates a query. Useful for data fetching, caching, and synchronization with server state.
 ///
@@ -60,14 +60,14 @@ use std::time::Duration;
 /// ```
 ///
 pub fn use_query<K, V, Fu>(
-    key: impl Fn() -> K + 'static,
-    fetcher: impl Fn(K) -> Fu + 'static,
-    options: QueryOptions<V>,
+    key: impl Fn() -> K + Send + Sync + 'static,
+    fetcher: impl Fn(K) -> Fu + Send + Sync + 'static,
+    options: QueryOptions,
 ) -> QueryResult<V, impl RefetchFn>
 where
     K: crate::QueryKey + 'static,
     V: crate::QueryValue + 'static,
-    Fu: Future<Output = V> + 'static,
+    Fu: Future<Output = V> + Send + 'static,
 {
     let options = options.validate();
     // Find relevant state.
@@ -85,29 +85,24 @@ where
 
                 // Suspend indefinitely and wait for interruption.
                 QueryState::Created | QueryState::Loading => {
-                    sleep(LONG_TIME).await;
+                    let future = futures::future::pending();
+                    let () = future.await;
                     ResourceData(None)
                 }
             }
         }
     };
 
-    let resource: Resource<Query<K, V>, ResourceData<V>> = {
-        let default = options.default_value;
+    let resource: Resource<ResourceData<V>> = {
         match options.resource_option.unwrap_or_default() {
-            ResourceOption::NonBlocking => Resource::new_with_options(
+            ResourceOption::NonBlocking => Resource::new(
                 move || query.get(),
                 resource_fetcher,
-                default.map(|default| ResourceData(Some(default))),
             ),
             ResourceOption::Blocking => {
                 Resource::new_blocking(move || query.get(), resource_fetcher)
             }
-            ResourceOption::Local => create_local_resource_with_initial_value(
-                move || query.get(),
-                resource_fetcher,
-                default.map(|default| ResourceData(Some(default))),
-            ),
+            ResourceOption::Local => todo!() /* TODO, local resource has a different type now */
         }
     };
 
@@ -124,9 +119,8 @@ where
     {
         let query = query.get_untracked();
 
-        if resource.loading().get_untracked()
-            && !HydrationCtx::is_hydrating()
-            && query.with_state(|state| matches!(state, QueryState::Created))
+        if // TODO resource.loading().get_untracked() && !HydrationCtx::is_hydrating() &&
+             query.with_state(|state| matches!(state, QueryState::Created))
         {
             query.execute()
         }
@@ -168,74 +162,41 @@ where
     }
 }
 
-const LONG_TIME: Duration = Duration::from_secs(60 * 60 * 24);
-
-async fn sleep(duration: Duration) {
-    use cfg_if::cfg_if;
-    cfg_if! {
-        if #[cfg(any(feature = "hydrate", feature = "csr"))] {
-            gloo_timers::future::sleep(duration).await;
-        } else if #[cfg(feature = "ssr")] {
-            tokio::time::sleep(duration).await;
-        } else {
-            let _ = duration;
-            logging::console_debug_warn("You are missing a Cargo feature for leptos_query. Please enable one of 'ssr', 'hydrate', or 'csr'.");
-        }
-    }
-}
-
 /// Wrapper type to enable using `Serializable`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceData<V>(Option<V>);
 
-impl<V> Serializable for ResourceData<V>
-where
-    V: Serializable,
-{
-    fn ser(&self) -> Result<String, SerializationError> {
-        if let Some(ref value) = self.0 {
-            value.ser()
-        } else {
-            Ok("null".to_string())
-        }
-    }
-
-    fn de(bytes: &str) -> Result<Self, SerializationError> {
-        match bytes {
-            "" | "null" => Ok(ResourceData(None)),
-            v => <V>::de(v).map(Some).map(ResourceData),
-        }
-    }
-}
-
 pub(crate) fn register_observer_handle_cleanup<K, V, Fu>(
-    fetcher: impl Fn(K) -> Fu + 'static,
+    fetcher: impl Fn(K) -> Fu + Send + Sync + 'static,
     query: Memo<Query<K, V>>,
-    options: QueryOptions<V>,
+    options: QueryOptions,
 ) -> Signal<QueryState<V>>
 where
-    K: crate::QueryKey + 'static,
-    V: crate::QueryValue + 'static,
-    Fu: Future<Output = V> + 'static,
+    K: crate::QueryKey + Send + Sync + 'static,
+    V: crate::QueryValue + Send + Sync + 'static,
+    Fu: Future<Output = V> + Send + 'static,
 {
     let state_signal = RwSignal::new(query.get_untracked().get_state());
-    let observer = Rc::new(QueryObserver::with_fetcher(
+    let observer = Arc::new(QueryObserver::with_fetcher(
         fetcher,
         options,
         query.get_untracked(),
     ));
-    let listener = Rc::new(Cell::new(None::<ListenerKey>));
+    let listener = Arc::new(Mutex::new(None::<ListenerKey>));
 
     Effect::new_isomorphic({
         let observer = observer.clone();
         let listener = listener.clone();
         move |_| {
             // Ensure listener is set
-            if listener.get().is_none() {
-                let listener_id = observer.add_listener(move |state| {
-                    state_signal.set(state.clone());
-                });
-                listener.set(Some(listener_id));
+            {
+                let mut listener = listener.lock().unwrap();
+                if listener.is_none() {
+                    let listener_id = observer.add_listener(move |state| {
+                        state_signal.set(state.clone());
+                    });
+                    *listener = Some(listener_id);
+                }
             }
 
             // Update
@@ -246,9 +207,12 @@ where
     });
 
     on_cleanup(move || {
-        if let Some(listener_id) = listener.take() {
-            if !observer.remove_listener(listener_id) {
-                logging::console_debug_warn("Failed to remove listener.");
+        {
+            let mut listener = listener.lock().unwrap();
+            if let Some(listener_id) = listener.take() {
+                if !observer.remove_listener(listener_id) {
+                    logging::debug_warn!("Failed to remove listener.");
+                }
             }
         }
         observer.cleanup()

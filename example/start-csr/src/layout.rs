@@ -72,9 +72,9 @@ fn SelectPersister() -> impl IntoView {
     let (persister, set_persister, _) =
         use_local_storage::<Persister, FromToStringCodec>(Persister::None);
 
-    create_effect(move |_| set_persister(persister.get_untracked()));
+    Effect::new(move |_| set_persister(persister.get_untracked()));
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let client = use_query_client();
         let persister = persister.get();
 

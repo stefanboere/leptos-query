@@ -1,9 +1,10 @@
-
+use async_trait::async_trait;
 
 use crate::cache_observer::{CacheEvent, CacheObserver};
 
 /// A utility for client side query persistance
 // Futures produced by the trait methods do not have to be Send, because everything is single threaded.
+#[async_trait(?Send)]
 pub trait QueryPersister {
     /// Persist a query to the persister
     async fn persist(&self, key: &str, query: PersistQueryData);
@@ -26,7 +27,7 @@ where
                 if let Ok(value) = TryInto::<PersistQueryData>::try_into(query.state) {
                     let key = query.key.0;
                     let persister = self.clone();
-                    leptos::spawn_local(async move {
+                    leptos::task::spawn_local(async move {
                         persister.persist(&key, value).await;
                     })
                 }
@@ -36,7 +37,7 @@ where
                 if let Ok(value) = TryInto::<PersistQueryData>::try_into(query.state) {
                     let key = query.key.0;
                     let persister = self.clone();
-                    leptos::spawn_local(async move {
+                    leptos::task::spawn_local(async move {
                         persister.persist(&key, value).await;
                     })
                 }
@@ -44,7 +45,7 @@ where
             #[cfg(any(feature = "hydrate", feature = "csr"))]
             CacheEvent::Removed(key) => {
                 let persister = self.clone();
-                leptos::spawn_local(async move {
+                leptos::task::spawn_local(async move {
                     let _ = persister.remove(&key.0).await;
                 })
             }
@@ -57,7 +58,7 @@ where
 #[derive(Clone)]
 #[cfg_attr(
     any(feature = "local_storage", feature = "indexed_db"),
-    derive(miniserde::Serialize, miniserde::Deserialize)
+    derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct PersistQueryData {
     /// The serialized query data.
@@ -73,7 +74,7 @@ where
     type Error = leptos::prelude::ServerFnError;
 
     fn try_from(value: PersistQueryData) -> Result<Self, Self::Error> {
-        let data = leptos::Serializable::de(value.value.as_str())?;
+        let data = serde_json::from_str(value.value.as_str())?;
         let updated_at = crate::Instant(std::time::Duration::from_millis(value.updated_at));
         Ok(crate::QueryData { data, updated_at })
     }

@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{time::Duration, sync::{Arc, Mutex}};
 
 use leptos::{leptos_dom::helpers::TimeoutHandle, prelude::*};
 
@@ -6,11 +6,11 @@ use crate::query::Query;
 
 #[derive(Clone)]
 pub struct GarbageCollector<K, V> {
-    query: Rc<Query<K, V>>,
+    query: Arc<Query<K, V>>,
     // Outer options is if option has been set, inner option is the actual value.
     // If inner option is none, then the query should not be garbage collected.
-    gc_time: Rc<Cell<GcTime>>,
-    handle: Rc<Cell<Option<TimeoutHandle>>>,
+    gc_time: Arc<Mutex<GcTime>>,
+    handle: Arc<Mutex<Option<TimeoutHandle>>>,
 }
 
 impl<K, V> std::fmt::Debug for GarbageCollector<K, V>
@@ -53,37 +53,42 @@ where
 {
     pub fn new(query: Query<K, V>) -> Self {
         Self {
-            query: Rc::new(query),
-            gc_time: Rc::new(Cell::new(GcTime::None)),
-            handle: Rc::new(Cell::new(None)),
+            query: Arc::new(query),
+            gc_time: Arc::new(Mutex::new(GcTime::None)),
+            handle: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Keep max gc time.
     pub fn update_gc_time(&self, gc_time: Option<Duration>) {
-        match (self.gc_time.get(), gc_time) {
+        let mut self_gc_time = self.gc_time.lock().unwrap();
+        match (*self_gc_time, gc_time) {
             // Set gc time first time.
             (GcTime::None, gc_time) => {
-                self.gc_time.set(GcTime::from_option(gc_time));
+                *self_gc_time = GcTime::from_option(gc_time);
             }
             // Greater than current gc time.
             (GcTime::Some(current), Some(gc_time)) if gc_time > current => {
-                self.gc_time.set(GcTime::Some(gc_time));
+                *self_gc_time = GcTime::Some(gc_time);
             }
             // Never expires.
             (GcTime::Some(_), None) => {
-                self.gc_time.set(GcTime::Never);
+                *self_gc_time = GcTime::Never;
             }
             _ => {}
         }
     }
 
     pub fn enable_gc(&self) {
-        if self.handle.get().is_some() {
+        let mut handle= self.handle.lock().unwrap();
+        if handle.is_some() {
             return;
         }
 
-        let gc_time = self.gc_time.get();
+        let gc_time = {
+            let gc_time = self.gc_time.lock().unwrap();
+            *gc_time
+        };
         let updated_at = self.query.get_updated_at();
 
         if let (GcTime::Some(gc_time), Some(updated_at)) = (gc_time, updated_at) {
@@ -99,12 +104,13 @@ where
             )
             .ok();
 
-            self.handle.set(new_handle);
+            *handle = new_handle;
         }
     }
 
     pub fn disable_gc(&self) {
-        if let Some(handle) = self.handle.take() {
+        let mut handle = self.handle.lock().unwrap();
+        if let Some(handle) = handle.take() {
             handle.clear();
         }
     }
@@ -123,18 +129,18 @@ mod test {
     #[test]
     fn test_gc() {
         let gc = create_query();
-        assert_eq!(gc.gc_time.get(), GcTime::None);
+        assert_eq!(*gc.gc_time.lock().unwrap(), GcTime::None);
 
         gc.update_gc_time(Some(Duration::from_secs(10)));
 
-        assert_eq!(gc.gc_time.get(), GcTime::Some(Duration::from_secs(10)));
+        assert_eq!(*gc.gc_time.lock().unwrap(), GcTime::Some(Duration::from_secs(10)));
 
         gc.update_gc_time(Some(Duration::from_secs(5)));
 
-        assert_eq!(gc.gc_time.get(), GcTime::Some(Duration::from_secs(10)));
+        assert_eq!(*gc.gc_time.lock().unwrap(), GcTime::Some(Duration::from_secs(10)));
 
         gc.update_gc_time(None);
 
-        assert_eq!(gc.gc_time.get(), GcTime::Never);
+        assert_eq!(*gc.gc_time.lock().unwrap(), GcTime::Never);
     }
 }

@@ -71,6 +71,7 @@
 
 use leptos::prelude::*;
 
+/// Main devtools component
 #[component]
 pub fn LeptosQueryDevtools() -> impl IntoView {
     #[cfg(any(debug_assertions, feature = "force"))]

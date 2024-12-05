@@ -10,9 +10,9 @@ readme = "README.md"
 repository = "https://github.com/nicoburniske/leptos_query/"
 
 [dependencies]
-cfg-if = { workspace = true } 
+cfg-if = { workspace = true }
 leptos = { workspace = true }
-leptos_query = { version = "0.5", path = "../query" }
+leptos_query = { version = "0.6", path = "../query" }
 js-sys = { workspace = true, optional = true }
 web-sys = { workspace = true, features = ["DomRect"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }

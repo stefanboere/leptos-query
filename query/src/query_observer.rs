@@ -1,6 +1,7 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::future::Future;
-use std::{pin::Pin, rc::Rc};
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 use leptos::leptos_dom::helpers::IntervalHandle;
 use slotmap::{new_key_type, SlotMap};
@@ -11,15 +12,15 @@ use crate::{QueryKey, QueryOptions, QueryState, QueryValue};
 #[derive(Clone)]
 pub struct QueryObserver<K, V> {
     id: ObserverKey,
-    query: Rc<RefCell<Option<Query<K, V>>>>,
+    query: Arc<Mutex<Option<Query<K, V>>>>,
     fetcher: Option<Fetcher<K, V>>,
-    refetch: Rc<Cell<Option<IntervalHandle>>>,
-    options: QueryOptions<V>,
+    refetch: Arc<Mutex<Option<IntervalHandle>>>,
+    options: QueryOptions,
     #[allow(clippy::type_complexity)]
-    listeners: Rc<RefCell<SlotMap<ListenerKey, Box<dyn Fn(&QueryState<V>)>>>>,
+    listeners: Arc<Mutex<SlotMap<ListenerKey, Box<dyn Fn(&QueryState<V>) + Send>>>>,
 }
 
-type Fetcher<K, V> = Rc<dyn Fn(K) -> Pin<Box<dyn Future<Output = V>>>>;
+type Fetcher<K, V> = Arc<dyn Fn(K) -> Pin<Box<dyn Future<Output = V> + Send>> + Send + Sync>;
 
 new_key_type! {
     pub struct ListenerKey;
@@ -35,9 +36,9 @@ where
             .field("id", &self.id)
             .field("query", &self.query)
             .field("fetcher", &self.fetcher.is_some())
-            .field("refetch", &self.refetch.get().is_some())
+            .field("refetch", &self.refetch.lock().unwrap().is_some())
             .field("options", &self.options)
-            .field("listeners", &self.listeners.borrow().len())
+            .field("listeners", &self.listeners.lock().unwrap().len())
             .finish()
     }
 }
@@ -47,17 +48,17 @@ where
     K: QueryKey + 'static,
     V: QueryValue + 'static,
 {
-    pub fn with_fetcher<F, Fu>(fetcher: F, options: QueryOptions<V>, query: Query<K, V>) -> Self
+    pub fn with_fetcher<F, Fu>(fetcher: F, options: QueryOptions, query: Query<K, V>) -> Self
     where
-        F: Fn(K) -> Fu + 'static,
-        Fu: Future<Output = V> + 'static,
+        F: Fn(K) -> Fu + Send + Sync + 'static,
+        Fu: Future<Output = V> + Send + 'static,
     {
         let fetcher =
             Some(
-                Rc::new(move |s| Box::pin(fetcher(s)) as Pin<Box<dyn Future<Output = V>>>)
+                Arc::new(move |s| Box::pin(fetcher(s)) as Pin<Box<dyn Future<Output = V> + Send>>)
                     as Fetcher<K, V>,
             );
-        let query = Rc::new(RefCell::new(Some(query)));
+        let query = Arc::new(Mutex::new(Some(query)));
         let id = next_id();
 
         #[cfg(any(feature = "csr", feature = "hydrate"))]
@@ -67,9 +68,9 @@ where
             let interval = {
                 if let Some(refetch_interval) = options.refetch_interval {
                     let query = query.clone();
-                    let timeout = leptos::set_interval_with_handle(
+                    let timeout = leptos::leptos_dom::helpers::set_interval_with_handle(
                         move || {
-                            if let Ok(query) = query.try_borrow() {
+                            if let Ok(query) = query.try_lock() {
                                 if let Some(query) = query.as_ref() {
                                     query.execute()
                                 }
@@ -88,10 +89,10 @@ where
                     None
                 }
             };
-            Rc::new(Cell::new(interval))
+            Arc::new(Mutex::new(interval))
         };
         #[cfg(not(any(feature = "csr", feature = "hydrate")))]
-        let refetch = Rc::new(Cell::new(None));
+        let refetch = Arc::new(Mutex::new(None));
 
         let observer = Self {
             id,
@@ -99,34 +100,39 @@ where
             fetcher,
             refetch,
             options,
-            listeners: Rc::new(RefCell::new(SlotMap::with_key())),
+            listeners: Arc::new(Mutex::new(SlotMap::with_key())),
         };
 
-        if let Some(query) = query.borrow().as_ref() {
-            query.subscribe(&observer);
-            if query.is_stale() {
-                query.execute()
+        {
+            if let Some(query) = query.lock().unwrap().as_ref() {
+                query.subscribe(&observer);
+                if query.is_stale() {
+                    query.execute()
+                }
             }
         }
 
         observer
     }
 
-    pub fn no_fetcher(options: QueryOptions<V>, query: Option<Query<K, V>>) -> Self {
-        let query = Rc::new(RefCell::new(query));
+    pub fn no_fetcher(options: QueryOptions, query: Option<Query<K, V>>) -> Self {
+        let query = Arc::new(Mutex::new(query));
         let id = next_id();
 
         let observer = Self {
             id,
             query: query.clone(),
             fetcher: None,
-            refetch: Rc::new(Cell::new(None)),
+            refetch: Arc::new(Mutex::new(None)),
             options,
-            listeners: Rc::new(RefCell::new(SlotMap::with_key())),
+            listeners: Arc::new(Mutex::new(SlotMap::with_key())),
         };
 
-        if let Some(query) = query.borrow().as_ref() {
-            query.subscribe(&observer);
+        {
+            let query = query.lock().unwrap();
+            if let Some(query) = query.as_ref() {
+                query.subscribe(&observer);
+            }
         }
 
         observer
@@ -140,38 +146,39 @@ where
         self.id
     }
 
-    pub fn get_options(&self) -> &QueryOptions<V> {
+    pub fn get_options(&self) -> &QueryOptions {
         &self.options
     }
 
     pub fn notify(&self, state: QueryState<V>) {
-        let listeners = self.listeners.try_borrow().expect("notify borrow");
+        let listeners = self.listeners.lock().unwrap();
         for listener in listeners.values() {
             listener(&state);
         }
     }
 
-    pub fn add_listener(&self, listener: impl Fn(&QueryState<V>) + 'static) -> ListenerKey {
+    pub fn add_listener(&self, listener: impl Fn(&QueryState<V>) + Send + 'static) -> ListenerKey {
         let listener = Box::new(listener);
         let key = self
             .listeners
-            .try_borrow_mut()
-            .expect("add_listener borrow_mut")
+            .lock()
+            .unwrap()
             .insert(listener);
         key
     }
 
     pub fn remove_listener(&self, key: ListenerKey) -> bool {
         self.listeners
-            .try_borrow_mut()
-            .expect("remove_listener borrow_mut")
+            .lock()
+            .unwrap()
             .remove(key)
             .is_some()
     }
 
     pub fn update_query(&self, new_query: Option<Query<K, V>>) {
+        let mut query = self.query.lock().unwrap();
         // Determine if the new query is the same as the current one.
-        let is_same_query = self.query.borrow().as_ref().map_or(false, |current_query| {
+        let is_same_query = query.as_ref().map_or(false, |current_query| {
             new_query.as_ref().map_or(false, |new_query| {
                 new_query.get_key() == current_query.get_key()
             })
@@ -183,12 +190,12 @@ where
         }
 
         // If there's an existing query, unsubscribe from it.
-        if let Some(current_query) = self.query.take() {
+        if let Some(current_query) = query.take() {
             current_query.unsubscribe(self);
         }
 
         // Set the new query (if any) and subscribe to it.
-        *self.query.borrow_mut() = new_query.clone(); // Use clone to keep ownership with the caller.
+        *query = new_query.clone(); // Use clone to keep ownership with the caller.
 
         if let Some(ref query) = new_query {
             // Subscribe to the new query and ensure it's executed.
@@ -198,18 +205,24 @@ where
     }
 
     pub fn cleanup(&self) {
-        if let Some(query) = self.query.take() {
-            query.unsubscribe(self);
+        {
+            let mut query = self.query.lock().unwrap();
+            if let Some(query) = query.take() {
+                query.unsubscribe(self);
+            }
         }
 
-        if let Some(interval) = self.refetch.take() {
-            interval.clear();
+        {
+            let mut refetch = self.refetch.lock().unwrap();
+            if let Some(interval) = refetch.take() {
+                interval.clear();
+            }
         }
 
         if !self
             .listeners
-            .try_borrow()
-            .expect("cleanup borrow")
+            .lock()
+            .unwrap()
             .is_empty()
         {
             leptos::logging::debug_warn!(

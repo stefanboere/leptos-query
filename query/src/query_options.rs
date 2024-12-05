@@ -32,9 +32,7 @@ const DEFAULT_GC_TIME: Duration = Duration::from_secs(60 * 5);
  * Options for a query [`use_query()`](crate::use_query())
  */
 #[derive(Debug, Clone)]
-pub struct QueryOptions<V> {
-    /// Placeholder value to use while the query is loading for the first time.
-    pub default_value: Option<V>,
+pub struct QueryOptions {
     /// The duration that should pass before a query is considered stale.
     /// If the query is stale, it will be refetched.
     /// If no stale_time, the query will never be considered stale.
@@ -55,15 +53,7 @@ pub struct QueryOptions<V> {
     pub resource_option: Option<ResourceOption>,
 }
 
-impl<V> QueryOptions<V> {
-    /// Set the default value.
-    pub fn set_default_value(self, default_value: Option<V>) -> Self {
-        QueryOptions {
-            default_value,
-            ..self
-        }
-    }
-
+impl QueryOptions {
     /// Set the stale_time.
     pub fn set_stale_time(self, stale_time: Option<Duration>) -> Self {
         QueryOptions { stale_time, ..self }
@@ -90,17 +80,6 @@ impl<V> QueryOptions<V> {
         }
     }
 
-    /// Transform the default value.
-    pub fn map_value<R>(self, func: impl FnOnce(V) -> R) -> QueryOptions<R> {
-        QueryOptions {
-            default_value: self.default_value.map(func),
-            stale_time: self.stale_time,
-            gc_time: self.gc_time,
-            refetch_interval: self.refetch_interval,
-            resource_option: self.resource_option,
-        }
-    }
-
     /// Ensures that gc_time is >= than stale_time.
     pub fn validate(self) -> Self {
         let stale_time = self.stale_time;
@@ -109,7 +88,6 @@ impl<V> QueryOptions<V> {
         let stale_time = ensure_valid_stale_time(&stale_time, &gc_time);
 
         QueryOptions {
-            default_value: self.default_value,
             stale_time,
             gc_time: self.gc_time,
             refetch_interval: self.refetch_interval,
@@ -118,14 +96,13 @@ impl<V> QueryOptions<V> {
     }
 }
 
-impl<V> Default for QueryOptions<V> {
+impl Default for QueryOptions {
     fn default() -> Self {
         // Use cache wide defaults if they exist.
         let default_options = leptos::prelude::use_context::<crate::QueryClient>()
             .map(|c| c.default_options)
             .unwrap_or_default();
         Self {
-            default_value: None,
             stale_time: default_options.stale_time,
             gc_time: default_options.gc_time,
             refetch_interval: default_options.refetch_interval,
@@ -184,8 +161,7 @@ mod tests {
 
     #[test]
     fn validate_stale_time_less_than_gc_time() {
-        let options = QueryOptions::<i32> {
-            default_value: None,
+        let options = QueryOptions {
             stale_time: Some(Duration::from_secs(5)),
             gc_time: Some(Duration::from_secs(10)),
             refetch_interval: None,
@@ -207,8 +183,7 @@ mod tests {
 
     #[test]
     fn validate_stale_time_greater_than_gc_time() {
-        let options = QueryOptions::<i32> {
-            default_value: None,
+        let options = QueryOptions {
             stale_time: Some(Duration::from_secs(15)),
             gc_time: Some(Duration::from_secs(10)),
             refetch_interval: None,
@@ -230,8 +205,7 @@ mod tests {
 
     #[test]
     fn validate_stale_time_without_gc_time() {
-        let options = QueryOptions::<i32> {
-            default_value: None,
+        let options = QueryOptions {
             stale_time: Some(Duration::from_secs(5)),
             gc_time: None,
             refetch_interval: None,
@@ -249,8 +223,7 @@ mod tests {
 
     #[test]
     fn validate_gc_time_without_stale_time() {
-        let options = QueryOptions::<i32> {
-            default_value: None,
+        let options = QueryOptions {
             stale_time: None,
             gc_time: Some(Duration::from_secs(10)),
             refetch_interval: None,
@@ -271,8 +244,7 @@ mod tests {
 
     #[test]
     fn validate_none_stale_and_gc_time() {
-        let options = QueryOptions::<i32> {
-            default_value: None,
+        let options = QueryOptions {
             stale_time: None,
             gc_time: None,
             refetch_interval: None,
@@ -294,7 +266,7 @@ mod tests {
         });
 
         // Action: Create a QueryOptions instance using Default::default()
-        let default_options: QueryOptions<()> = Default::default();
+        let default_options: QueryOptions = Default::default();
 
         // Verification: Assert that QueryOptions has the expected default values
         assert_eq!(

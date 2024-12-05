@@ -1,4 +1,4 @@
-use std::{fmt::Debug, rc::Rc};
+use std::{fmt::Debug, sync::Arc};
 
 use crate::{query::Query, QueryState};
 
@@ -49,13 +49,10 @@ impl CacheEvent {
         CacheEvent::Removed(key.into())
     }
 
-    pub(crate) fn observer_added<K, V>(key: &K, options: crate::QueryOptions<V>) -> Self
+    pub(crate) fn observer_added<K>(key: &K, options: crate::QueryOptions) -> Self
     where
-        K: crate::QueryKey + 'static,
-        V: crate::QueryValue + 'static,
+        K: crate::QueryKey + 'static
     {
-        let options =
-            options.map_value(|v| leptos::Serializable::ser(&v).expect("Serialize Query Options"));
         CacheEvent::ObserverAdded(ObserverAdded {
             key: key.into(),
             options,
@@ -78,7 +75,7 @@ pub struct CreatedQuery {
     /// Serialized query state.
     pub state: QueryState<String>,
     /// Mark invalid
-    pub mark_invalid: Rc<dyn Fn() -> bool>,
+    pub mark_invalid: Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
 impl Debug for CreatedQuery {
@@ -109,7 +106,7 @@ pub struct ObserverAdded {
     /// The key of the query.
     pub key: QueryCacheKey,
     /// The observers options.
-    pub options: crate::QueryOptions<String>,
+    pub options: crate::QueryOptions,
 }
 
 impl<K, V> From<Query<K, V>> for CreatedQuery
@@ -120,10 +117,10 @@ where
     fn from(query: Query<K, V>) -> Self {
         let key: QueryCacheKey = query.get_key().into();
         let state = query.with_state(|state| {
-            state.map_data(|data| leptos::Serializable::ser(data).expect("Serialize Query State"))
+          state.map_data(|data| serde_json::to_string(data).expect("Serialize Query State"))
         });
 
-        let mark_invalid = Rc::new(move || query.mark_invalid());
+        let mark_invalid = Arc::new(move || query.mark_invalid());
 
         CreatedQuery {
             key,
@@ -141,7 +138,7 @@ where
     fn from(query: Query<K, V>) -> Self {
         let key: QueryCacheKey = query.get_key().into();
         let state = query.with_state(|state| {
-            state.map_data(|data| leptos::Serializable::ser(data).expect("Serialize Query State"))
+            state.map_data(|data| serde_json::to_string(data).expect("Serialize Query State"))
         });
 
         SerializedQuery { key, state }

@@ -1,6 +1,6 @@
 use crate::{query_observer::ListenerKey, *};
 use leptos::prelude::*;
-use std::{borrow::Borrow, cell::Cell, collections::HashMap, future::Future, rc::Rc};
+use std::{borrow::Borrow, collections::HashMap, future::Future, sync::{Arc, Mutex}};
 
 use self::{
     cache_observer::CacheObserver, query::Query, query_cache::QueryCache,
@@ -22,7 +22,7 @@ pub fn provide_query_client_with_options(options: DefaultQueryOptions) {
 /// Provides a Query Client to the current scope with custom options and a persister.
 pub fn provide_query_client_with_options_and_persister(
     options: DefaultQueryOptions,
-    persister: impl QueryPersister + Clone + 'static,
+    persister: impl QueryPersister + Clone + Sync + Send + 'static,
 ) {
     let owner = Owner::current().expect("Owner to be present");
 
@@ -122,7 +122,7 @@ impl QueryClient {
     /// If the query does not exist, [`None`](Option::None) will be returned.
     pub fn get_query_state<K, V>(
         &self,
-        key: impl Fn() -> K + 'static,
+        key: impl Fn() -> K + Send + Sync + 'static,
     ) -> Signal<Option<QueryState<V>>>
     where
         K: QueryKey + 'static,
@@ -139,23 +139,26 @@ impl QueryClient {
             cache.get_query::<K, V>(&key)
         });
 
-        let observer = Rc::new(QueryObserver::no_fetcher(
+        let observer = Arc::new(QueryObserver::no_fetcher(
             QueryOptions::default(),
             maybe_query.get_untracked(),
         ));
 
         let state_signal = RwSignal::new(maybe_query.get_untracked().map(|q| q.get_state()));
 
-        let listener = Rc::new(Cell::new(None::<ListenerKey>));
+        let listener = Arc::new(Mutex::new(None::<ListenerKey>));
 
         Effect::new_isomorphic({
             move |_| {
                 // Ensure listener is set.
-                if listener.get().is_none() {
-                    let listener_id = observer.add_listener(move |state| {
-                        state_signal.set(Some(state.clone()));
-                    });
-                    listener.set(Some(listener_id));
+                {
+                    let mut listener = listener.lock().unwrap();
+                    if listener.is_none() {
+                        let listener_id = observer.add_listener(move |state| {
+                            state_signal.set(Some(state.clone()));
+                        });
+                        *listener = Some(listener_id);
+                    }
                 }
 
                 // Update
@@ -402,7 +405,7 @@ impl QueryClient {
                 }
                 None => {
                     if let Some(result) = updater(None) {
-                        let query = Owner::new_root(owner).with(|| Query::new(key));
+                        let query = Owner::new_root(owner.shared_context()).with(|| Query::new(key));
                         query.set_state(QueryState::Loaded(QueryData::now(result)));
                         Some(query)
                     } else {
@@ -464,7 +467,7 @@ impl QueryClient {
     }
 
     /// Registers the cache observer.
-    pub fn register_cache_observer(&self, observer: impl CacheObserver + 'static) {
+    pub fn register_cache_observer(&self, observer: impl CacheObserver + Send + 'static) {
         let key = self.cache.register_observer(observer);
         let cache = self.cache.clone();
 
@@ -474,7 +477,7 @@ impl QueryClient {
     }
 
     /// Adds a persister to the cache.
-    pub fn add_persister(&self, persister: impl QueryPersister + Clone + 'static) {
+    pub fn add_persister(&self, persister: impl QueryPersister + Clone + Sync + Send + 'static) {
         self.register_cache_observer(persister.clone());
         self.cache.add_persister(persister);
     }

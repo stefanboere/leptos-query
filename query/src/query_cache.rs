@@ -1,8 +1,7 @@
 use std::{
     any::{Any, TypeId},
-    cell::RefCell,
     collections::{hash_map::Entry, HashMap},
-    rc::Rc,
+    sync::{Arc, Mutex}
 };
 
 use leptos::prelude::*;
@@ -19,10 +18,10 @@ use crate::{
 pub struct QueryCache {
     owner: Owner,
     #[allow(clippy::type_complexity)]
-    cache: Rc<RefCell<HashMap<(TypeId, TypeId), Box<dyn CacheEntryTrait>>>>,
+    cache: Arc<Mutex<HashMap<(TypeId, TypeId), Box<dyn CacheEntryTrait + Send>>>>,
     #[allow(clippy::type_complexity)]
-    observers: Rc<RefCell<SlotMap<CacheObserverKey, Box<dyn CacheObserver>>>>,
-    persister: Rc<RefCell<Option<Rc<dyn QueryPersister>>>>,
+    observers: Arc<Mutex<SlotMap<CacheObserverKey, Box<dyn CacheObserver + Send>>>>,
+    persister: Arc<Mutex<Option<Arc<dyn QueryPersister + Send + Sync>>>>,
     size: RwSignal<usize>,
 }
 
@@ -118,10 +117,10 @@ impl QueryCache {
     pub fn new(owner: Owner) -> Self {
         Self {
             owner,
-            cache: Rc::new(RefCell::new(HashMap::new())),
-            observers: Rc::new(RefCell::new(SlotMap::with_key())),
+            cache: Arc::new(Mutex::new(HashMap::new())),
+            observers: Arc::new(Mutex::new(SlotMap::with_key())),
             size: RwSignal::new(0),
-            persister: Rc::new(RefCell::new(None)),
+            persister: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -143,7 +142,7 @@ impl QueryCache {
                     entry
                 }
                 Entry::Vacant(entry) => {
-                    let query = with_owner(query_cache.owner, || Query::new(key));
+                    let query = query_cache.owner.with(|| Query::new(key));
                     query_cache.notify_new_query(query.clone());
                     created = true;
                     entry.insert(query)
@@ -154,9 +153,13 @@ impl QueryCache {
 
         #[cfg(any(feature = "hydrate", feature = "csr"))]
         if created {
-            if let Some(persister) = self.persister.borrow().clone() {
+            let persister = {
+                let p = self.persister.lock().unwrap();
+                p.clone()
+            };
+            if let Some(persister) = persister {
                 let query = query.clone();
-                spawn_local({
+                leptos::task::spawn_local({
                     async move {
                         let key = crate::cache_observer::make_cache_key(query.get_key());
                         let result = persister.retrieve(key.as_str()).await;
@@ -183,7 +186,7 @@ impl QueryCache {
                                     }
                                 }
                                 Err(e) => {
-                                    logging::debug_warn!(
+                                    leptos::logging::debug_warn!(
                                         "Error deserializing query state: {:?}",
                                         e
                                     );
@@ -211,7 +214,7 @@ impl QueryCache {
         self.use_cache_option(move |cache| cache.get(key).cloned())
     }
 
-    pub fn get_query_signal<K, V>(&self, key: impl Fn() -> K + 'static) -> Memo<Query<K, V>>
+    pub fn get_query_signal<K, V>(&self, key: impl Fn() -> K + Send + Sync + 'static) -> Memo<Query<K, V>>
     where
         K: QueryKey + 'static,
         V: QueryValue + 'static,
@@ -232,8 +235,10 @@ impl QueryCache {
                 let cache = self.cache.clone();
                 Memo::new(move |_| {
                     let size = size_signal.get();
-                    let cache = RefCell::try_borrow(&cache).expect("size borrow");
-                    let real_size: usize = cache.values().map(|b| b.size()).sum();
+                    let real_size: usize = {
+                        let cache = cache.lock().unwrap();
+                        cache.values().map(|b| b.size()).sum()
+                    };
                     assert!(size == real_size, "Cache size mismatch");
                     size
                 }).into()
@@ -266,8 +271,7 @@ impl QueryCache {
     }
 
     pub fn invalidate_all_queries(&self) {
-        for cache in RefCell::try_borrow(&self.cache)
-            .expect("invalidate_all_queries borrow")
+        for cache in self.cache.lock().unwrap()
             .values()
         {
             cache.invalidate();
@@ -275,19 +279,26 @@ impl QueryCache {
     }
 
     pub fn clear_all_queries(&self) {
-        let mut caches =
-            RefCell::try_borrow_mut(&self.cache).expect("clear_all_queries borrow mut");
+        {
+            let mut caches = self.cache.lock().unwrap();
 
-        for cache in caches.values_mut() {
-            cache.clear(self);
+            for cache in caches.values_mut() {
+                cache.clear(self);
+            }
         }
         // Though persister receives removal events, there may be queries in persister that are not yet in cache.
         // So we should clear them all.
         #[cfg(any(feature = "hydrate", feature = "csr"))]
-        if let Some(persister) = self.persister.borrow().clone() {
-            spawn_local(async move {
-                persister.clear().await;
-            });
+        {
+            let persister = {
+                let persister = self.persister.lock().unwrap();
+                persister.clone()
+            };
+            if let Some(persister) = persister {
+                leptos::task::spawn_local(async move {
+                    persister.clear().await;
+                });
+            }
         }
 
         // Need to queue microtask to avoid borrow errors.
@@ -304,7 +315,7 @@ impl QueryCache {
         F: FnOnce(&HashMap<K, Query<K, V>>) -> Option<R>,
         R: 'static,
     {
-        let cache = RefCell::try_borrow(&self.cache).expect("use_cache_option borrow");
+        let cache = self.cache.lock().unwrap();
         let type_key = (TypeId::of::<K>(), TypeId::of::<V>());
         let cache = cache.get(&type_key)?;
         let cache = cache
@@ -321,7 +332,7 @@ impl QueryCache {
         F: FnOnce(&mut HashMap<K, Query<K, V>>) -> Option<R>,
         R: 'static,
     {
-        let mut cache = RefCell::try_borrow_mut(&self.cache).expect("use_cache_option_mut borrow");
+        let mut cache = self.cache.lock().unwrap();
         let type_key = (TypeId::of::<K>(), TypeId::of::<V>());
         let cache = cache.get_mut(&type_key)?;
         let cache = cache
@@ -336,11 +347,11 @@ impl QueryCache {
         K: QueryKey + 'static,
         V: QueryValue + 'static,
     {
-        let mut cache = RefCell::try_borrow_mut(&self.cache).expect("use_cache borrow");
+        let mut cache = self.cache.lock().unwrap();
 
         let type_key = (TypeId::of::<K>(), TypeId::of::<V>());
 
-        let cache: &mut Box<dyn CacheEntryTrait> = match cache.entry(type_key) {
+        let cache: &mut Box<dyn CacheEntryTrait + Send> = match cache.entry(type_key) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => {
                 let wrapped: CacheEntry<K, V> = CacheEntry(HashMap::new());
@@ -370,7 +381,7 @@ impl QueryCache {
 
         self.use_cache(|cache| match cache.entry(key) {
             Entry::Vacant(entry) => {
-                if let Some(query) = func((query_cache.owner, None)) {
+                if let Some(query) = func((query_cache.owner.clone(), None)) {
                     entry.insert(query.clone());
                     // Report insert.
                     created = true;
@@ -379,7 +390,7 @@ impl QueryCache {
             }
             Entry::Occupied(mut entry) => {
                 let query = entry.get();
-                if let Some(query) = func((query_cache.owner, Some(query))) {
+                if let Some(query) = func((query_cache.owner.clone(), Some(query))) {
                     entry.insert(query);
                 }
             }
@@ -391,32 +402,34 @@ impl QueryCache {
         }
     }
 
-    pub fn register_observer(&self, observer: impl CacheObserver + 'static) -> CacheObserverKey {
+    pub fn register_observer(&self, observer: impl CacheObserver + Send + 'static) -> CacheObserverKey {
         // Update all existing cache entries with the new observer.
-        self.cache.borrow().values().for_each(|cache| {
-            cache.update_observer(&observer);
-        });
+        {
+            self.cache.lock().unwrap().values().for_each(|cache| {
+                cache.update_observer(&observer);
+            });
+        }
 
         self.observers
-            .try_borrow_mut()
-            .expect("register_query_observer borrow mut")
+            .lock()
+            .unwrap()
             .insert(Box::new(observer))
     }
 
-    pub fn unregister_observer(&self, key: CacheObserverKey) -> Option<Box<dyn CacheObserver>> {
+    pub fn unregister_observer(&self, key: CacheObserverKey) -> Option<Box<dyn CacheObserver + Send>> {
         self.observers
-            .try_borrow_mut()
-            .expect("unregister_query_observer borrow mut")
+            .lock()
+            .unwrap()
             .remove(key)
     }
 
-    pub fn add_persister(&self, persister: impl QueryPersister + 'static) {
-        let persister = Rc::new(persister) as Rc<dyn QueryPersister>;
-        *self.persister.borrow_mut() = Some(persister);
+    pub fn add_persister(&self, persister: impl QueryPersister + Send + Sync + 'static) {
+        let persister = Arc::new(persister) as Arc<dyn QueryPersister + Send + Sync>;
+        *self.persister.lock().unwrap() = Some(persister);
     }
 
-    pub fn remove_persister(&self) -> Option<Rc<dyn QueryPersister>> {
-        self.persister.borrow_mut().take()
+    pub fn remove_persister(&self) -> Option<Arc<dyn QueryPersister + Send + Sync>> {
+        self.persister.lock().unwrap().take()
     }
 
     pub fn notify<K, V>(&self, notification: CacheNotification<K, V>)
@@ -454,8 +467,8 @@ impl QueryCache {
     pub fn notify_observers(&self, notification: CacheEvent) {
         let observers = self
             .observers
-            .try_borrow()
-            .expect("notify_observers borrow");
+            .lock()
+            .unwrap();
         for observer in observers.values() {
             observer.process_cache_event(notification.clone())
         }
@@ -464,13 +477,13 @@ impl QueryCache {
 
 pub enum CacheNotification<K, V> {
     UpdatedState(Query<K, V>),
-    NewObserver(NewObserver<K, V>),
+    NewObserver(NewObserver<K>),
     ObserverRemoved(K),
 }
 
-pub struct NewObserver<K, V> {
+pub struct NewObserver<K> {
     pub key: K,
-    pub options: QueryOptions<V>,
+    pub options: QueryOptions,
 }
 
 const EXPECT_CACHE_ERROR: &str =

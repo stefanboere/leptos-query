@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::shell;
 use axum::{
     body::Body,
     extract::State,
@@ -20,7 +20,10 @@ pub async fn file_and_error_handler(
     if res.status() == StatusCode::OK {
         res.into_response()
     } else {
-        let handler = leptos_axum::render_app_to_stream(options.to_owned(), App);
+        let handler = leptos_axum::render_app_to_stream({
+            let leptos_options = options.to_owned();
+            move || shell(leptos_options.clone())
+        });
         handler(req).await.into_response()
     }
 }

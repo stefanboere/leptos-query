@@ -1,4 +1,5 @@
 use crate::query_persister::*;
+use async_trait::async_trait;
 
 /// A persister that uses local storage to persist queries.
 #[derive(Clone, Copy)]
@@ -7,7 +8,7 @@ pub struct LocalStoragePersister;
 #[cfg(any(feature = "hydrate", feature = "csr"))]
 thread_local! {
     #[cfg(any(feature = "hydrate", feature = "csr"))]
-    pub(crate) static LOCAL_STORAGE: Option<web_sys::Storage> = leptos::window().local_storage().ok().flatten()
+    pub(crate) static LOCAL_STORAGE: Option<web_sys::Storage> = leptos::leptos_dom::helpers::window().local_storage().ok().flatten()
 }
 
 #[cfg(any(feature = "hydrate", feature = "csr"))]
@@ -15,10 +16,11 @@ fn local_storage() -> Option<web_sys::Storage> {
     LOCAL_STORAGE.with(Clone::clone)
 }
 #[cfg(any(feature = "hydrate", feature = "csr"))]
+#[async_trait(?Send)]
 impl QueryPersister for LocalStoragePersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         if let Some(storage) = local_storage() {
-            let value = miniserde::json::to_string(&query);
+            let value = serde_json::to_string(&query).expect("to json string");
             let _ = storage.set(&key, &value);
         }
     }
@@ -32,7 +34,7 @@ impl QueryPersister for LocalStoragePersister {
     async fn retrieve(&self, key: &str) -> Option<PersistQueryData> {
         if let Some(storage) = local_storage() {
             if let Some(value) = storage.get_item(key).ok().flatten() {
-                return miniserde::json::from_str(&value).ok();
+                return serde_json::from_str(&value).ok();
             }
         }
         None
@@ -46,6 +48,7 @@ impl QueryPersister for LocalStoragePersister {
 }
 
 #[cfg(not(any(feature = "hydrate", feature = "csr")))]
+#[async_trait(?Send)]
 impl QueryPersister for LocalStoragePersister {
     async fn persist(&self, key: &str, query: PersistQueryData) {
         let _ = key;

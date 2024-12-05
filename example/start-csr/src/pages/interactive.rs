@@ -120,9 +120,9 @@ fn TodoListItem(todo: Todo) -> impl IntoView {
 fn AddTodoEntry() -> impl IntoView {
     let form_ref = create_node_ref::<html::Form>();
 
-    let titleX = create_rw_signal("".to_string());
-    let contentX = create_rw_signal("".to_string());
-    let loading = create_rw_signal(false);
+    let titleX = RwSignal::new("".to_string());
+    let contentX = RwSignal::new("".to_string());
+    let loading = RwSignal::new(false);
 
     let add_todo = move || {
         let all_todos = all_todos_query();

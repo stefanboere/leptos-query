@@ -1,5 +1,5 @@
 use std::pin::Pin;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::{borrow::Borrow, future::Future};
 
 use leptos::prelude::Signal;
@@ -30,7 +30,7 @@ use crate::{
 /// pub fn App() -> impl IntoView {
 ///    let scope = track_query();
 ///    let QueryResult { data, .. } = scope.use_query(|| TrackId(1));
-///    
+///
 ///     view! {
 ///        <div>
 ///            // Query data should be read inside a Transition/Suspense component.
@@ -75,15 +75,15 @@ use crate::{
 ///
 /// ```
 pub fn create_query<K, V, Fu>(
-    fetcher: impl Fn(K) -> Fu + 'static,
-    options: QueryOptions<V>,
+    fetcher: impl Fn(K) -> Fu + Send + Sync + 'static,
+    options: QueryOptions,
 ) -> QueryScope<K, V>
 where
     K: QueryKey + 'static,
     V: QueryValue + 'static,
-    Fu: Future<Output = V> + 'static,
+    Fu: Future<Output = V> + Send + 'static,
 {
-    let fetcher = Rc::new(move |s| Box::pin(fetcher(s)) as Pin<Box<dyn Future<Output = V>>>);
+    let fetcher = Arc::new(move |s| Box::pin(fetcher(s)) as Pin<Box<dyn Future<Output = V> + Send>>);
     QueryScope { fetcher, options }
 }
 
@@ -93,8 +93,8 @@ where
 #[derive(Clone)]
 pub struct QueryScope<K, V> {
     #[allow(clippy::type_complexity)]
-    fetcher: Rc<dyn Fn(K) -> Pin<Box<dyn Future<Output = V>>>>,
-    options: QueryOptions<V>,
+    fetcher: Arc<dyn Fn(K) -> Pin<Box<dyn Future<Output = V> + Send>> + Send + Sync>,
+    options: QueryOptions,
 }
 
 impl<K, V> QueryScope<K, V>
@@ -130,7 +130,7 @@ where
     ///    name: String,
     /// }
     /// ```
-    pub fn use_query(&self, key: impl Fn() -> K + 'static) -> QueryResult<V, impl RefetchFn> {
+    pub fn use_query(&self, key: impl Fn() -> K + Send + Sync + 'static) -> QueryResult<V, impl RefetchFn> {
         use_query(key, self.make_fetcher(), self.options.clone())
     }
 
@@ -139,8 +139,8 @@ where
     /// Returns a [`QueryResult`] similar to [`QueryScope::use_query`], but with the provided override options applied.
     pub fn use_query_with_options(
         &self,
-        key: impl Fn() -> K + 'static,
-        options: QueryOptions<V>,
+        key: impl Fn() -> K + Send + Sync + 'static,
+        options: QueryOptions,
     ) -> QueryResult<V, impl RefetchFn> {
         use_query(key, self.make_fetcher(), options)
     }
@@ -150,20 +150,20 @@ where
     /// Returns a [`QueryResult`] similar to [`QueryScope::use_query`], but with the provided override options applied.
     pub fn use_query_map_options(
         &self,
-        key: impl Fn() -> K + 'static,
-        options: impl FnOnce(QueryOptions<V>) -> QueryOptions<V>,
+        key: impl Fn() -> K + Send + Sync + 'static,
+        options: impl FnOnce(QueryOptions) -> QueryOptions,
     ) -> QueryResult<V, impl RefetchFn> {
         use_query(key, self.make_fetcher(), options(self.options.clone()))
     }
 
     /// Retrieves the default options for this scope.
-    pub fn get_options(&self) -> &QueryOptions<V> {
+    pub fn get_options(&self) -> &QueryOptions {
         &self.options
     }
 
     /// Prefetches a query and stores it in the cache. Useful for preloading data before it is needed.
     /// If you don't need the result opt for [`fetch_query()`](Self::fetch_query)
-    /// This should usually be called in a [`create_effect`](leptos::create_effect) or on an event (e.g. on:click).
+    /// This should usually be called in a [`Effect::new`](leptos::prelude::Effect::new) or on an event (e.g. on:click).
     pub async fn prefetch_query(&self, key: K) {
         use_query_client()
             .prefetch_query(key, self.make_fetcher())
@@ -174,7 +174,7 @@ where
     /// Result can be read outside of Transition.
     ///
     /// If you don't need the result opt for [`prefetch_query()`](Self::prefetch_query)
-    /// This should usually be called in a [`create_effect`](leptos::create_effect) or on an event (e.g. on:click).
+    /// This should usually be called in a [`Effect::new`](leptos::prelude::Effect::new) or on an event (e.g. on:click).
     pub async fn fetch_query(&self, key: K) -> QueryState<V> {
         use_query_client()
             .fetch_query(key, self.make_fetcher())
@@ -184,7 +184,7 @@ where
     /// Retrieves the current state of a query identified by the given key function.
     ///
     /// Returns A [`Signal`] containing the current [`QueryState`] of the query. If the query does not exist, the signal's value will be [`None`].
-    pub fn get_query_state(&self, key: impl Fn() -> K + 'static) -> Signal<Option<QueryState<V>>> {
+    pub fn get_query_state(&self, key: impl Fn() -> K + Send + Sync + 'static) -> Signal<Option<QueryState<V>>> {
         use_query_client().get_query_state(key)
     }
 
@@ -262,7 +262,7 @@ where
         use_query_client().cancel_query::<K, V>(key)
     }
 
-    fn make_fetcher(&self) -> impl Fn(K) -> Pin<Box<dyn Future<Output = V>>> {
+    fn make_fetcher(&self) -> impl Fn(K) -> Pin<Box<dyn Future<Output = V> + Send>> + Send + Sync {
         let fetcher = self.fetcher.clone();
         move |key| fetcher(key)
     }

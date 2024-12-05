@@ -4,7 +4,7 @@ resolver = "2"
 exclude = ["example"]
 
 [workspace.dependencies]
-leptos = { version = "0.7.0-beta5" }
+leptos = { version = "0.7.0" }
 cfg-if = "1"
 js-sys = { version = "0.3" }
 gloo-timers = { version = "0.3", features = ["futures"] }
@@ -13,3 +13,4 @@ slotmap = "1"
 futures-channel = "0.3"
 futures = "0.3"
 web-sys = "0.3"
+serde = "1.0"

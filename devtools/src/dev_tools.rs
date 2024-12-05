@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+use leptos::either::Either;
+use leptos::portal::Portal;
 use leptos_query::{
     cache_observer::{
         CacheEvent, CacheObserver, CreatedQuery, ObserverAdded, QueryCacheKey, SerializedQuery,
@@ -20,9 +22,9 @@ pub(crate) fn InnerDevtools() -> impl IntoView {
 
     move || {
         if mounted.get() {
-            view! { <DevtoolsClient/> }
+            Either::Left(view! { <DevtoolsClient/> })
         } else {
-            ().into_view()
+            Either::Right(())
         }
     }
 }
@@ -103,7 +105,7 @@ struct QueryCacheEntry {
     gc_time: RwSignal<SettingTime>,
     stale_time: RwSignal<SettingTime>,
     is_stale: Signal<bool>,
-    mark_invalid: std::rc::Rc<dyn Fn() -> bool>,
+    mark_invalid: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
 fn use_devtools_context() -> DevtoolsContext {
@@ -114,12 +116,12 @@ impl DevtoolsContext {
     fn new() -> Self {
         DevtoolsContext {
             owner: Owner::current().expect("Owner to be present"),
-            query_state: create_rw_signal(HashMap::new()),
-            open: create_rw_signal(false),
-            filter: create_rw_signal("".to_string()),
-            sort: create_rw_signal(SortOption::Time),
-            order_asc: create_rw_signal(false),
-            selected_query: create_rw_signal(None),
+            query_state: RwSignal::new(HashMap::new()),
+            open: RwSignal::new(false),
+            filter: RwSignal::new("".to_string()),
+            sort: RwSignal::new(SortOption::Time),
+            order_asc: RwSignal::new(false),
+            selected_query: RwSignal::new(None),
         }
     }
 }
@@ -196,12 +198,12 @@ impl CacheObserver for DevtoolsContext {
                 mark_invalid,
             }) => {
                 // Need to create signals with root owner, or else they will be disposed of.
-                let entry = with_owner(self.owner, || {
-                    let stale_time = create_rw_signal(SettingTime::None);
-                    let state = create_rw_signal(state);
+                let entry = self.owner.with(|| {
+                    let stale_time = RwSignal::new(SettingTime::None);
+                    let state = RwSignal::new(state);
 
                     let is_stale = {
-                        let (stale, set_stale) = create_signal(false);
+                        let (stale, set_stale) = signal(false);
 
                         let updated_at = Signal::derive(move || state.with(|s| s.updated_at()));
 
@@ -234,8 +236,8 @@ impl CacheObserver for DevtoolsContext {
                         key: key.clone(),
                         state,
                         stale_time,
-                        gc_time: create_rw_signal(SettingTime::None),
-                        observer_count: create_rw_signal(0),
+                        gc_time: RwSignal::new(SettingTime::None),
+                        observer_count: RwSignal::new(0),
                         is_stale,
                         mark_invalid,
                     }
@@ -339,9 +341,9 @@ fn Devtools() -> impl IntoView {
         query_state
     });
 
-    let container_ref = leptos::create_node_ref::<leptos::html::Div>();
+    let container_ref = NodeRef::<leptos::html::Div>::new();
 
-    let height_signal = create_rw_signal(500);
+    let height_signal = RwSignal::new(500);
 
     #[cfg(not(feature = "csr"))]
     let handle_drag_start = move |_| ();
@@ -426,7 +428,7 @@ fn Devtools() -> impl IntoView {
             <div
                 class="lq-bg-lq-background lq-text-lq-foreground lq-px-0 lq-fixed lq-bottom-0 lq-left-0 lq-right-0 lq-z-[1000]"
                 style:height=move || format!("{}px", height_signal.get())
-                ref=container_ref
+                node_ref=container_ref
             >
                 <div
                     class="lq-w-full lq-py-1 lq-bg-lq-background lq-cursor-ns-resize lq-transition-colors hover:lq-bg-lq-border"
@@ -612,7 +614,7 @@ fn SetSort() -> impl IntoView {
         <select
             id="countries"
             class="lq-form-select lq-border-lq-border lq-border lq-text-xs lq-rounded-md lq-block lq-w-48 lq-py-1 lq-px-2 lq-bg-lq-input lq-text-lq-input-foreground lq-line-clamp-1"
-            value=move || sort.get().as_str().to_string()
+            prop:value=move || sort.get().as_str().to_string()
             on:change=move |ev| {
                 let new_value = event_target_value(&ev);
                 let option = SortOption::from_string(&new_value);
@@ -641,7 +643,7 @@ fn SetSortOrder() -> impl IntoView {
             <span class="w-8">{move || { if order_asc.get() { "Asc " } else { "Desc" } }}</span>
             {move || {
                 if order_asc.get() {
-                    view! {
+                    Either::Left(view! {
                         <svg
                             width="15"
                             height="15"
@@ -656,9 +658,9 @@ fn SetSortOrder() -> impl IntoView {
                                 clip-rule="evenodd"
                             ></path>
                         </svg>
-                    }
+                    })
                 } else {
-                    view! {
+                    Either::Right(view! {
                         <svg
                             width="15"
                             height="15"
@@ -673,7 +675,7 @@ fn SetSortOrder() -> impl IntoView {
                                 clip-rule="evenodd"
                             ></path>
                         </svg>
-                    }
+                    })
                 }
             }}
 
@@ -724,17 +726,17 @@ fn QueryRow(entry: QueryCacheEntry) -> impl IntoView {
     let observer = move || {
         let count = observer_count.get();
         if count == 0 {
-            view! {
+            Either::Left(view! {
                 <span class="lq-inline-flex lq-items-center lq-gap-x-1.5 lq-rounded-md lq-bg-gray-100 lq-px-2 lq-py-1 lq-text-xs lq-font-medium lq-text-gray-700">
                     {count}
                 </span>
-            }
+            })
         } else {
-            view! {
+            Either::Right(view! {
                 <span class="lq-inline-flex lq-items-center lq-gap-x-1.5 lq-rounded-md lq-bg-green-100 lq-px-2 lq-py-1 lq-text-xs lq-font-medium lq-text-green-700">
                     {count}
                 </span>
-            }
+            })
         }
     };
     view! {
@@ -756,7 +758,7 @@ fn QueryRow(entry: QueryCacheEntry) -> impl IntoView {
             <span class="lq-w-[4.5rem]">
                 <RowStateLabel state=state.into() is_stale/>
             </span>
-            <span class="lq-text-sm">{key.0}</span>
+            <span class="lq-text-sm">{key.0.clone()}</span>
         </li>
     }
 }

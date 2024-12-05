@@ -1,14 +1,15 @@
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{sync::{Arc, Mutex}, time::Duration};
 
-use leptos::{create_effect, leptos_dom::helpers::TimeoutHandle, on_cleanup};
+use leptos::{leptos_dom::helpers::TimeoutHandle, prelude::{Effect, on_cleanup}};
 use leptos_query::Instant;
 
 pub(crate) fn use_timeout(func: impl Fn() -> Option<TimeoutHandle> + 'static) {
     // Saves last interval to be cleared on cleanup.
-    let timeout: Rc<Cell<Option<TimeoutHandle>>> = Rc::new(Cell::new(None));
+    let timeout: Arc<Mutex<Option<TimeoutHandle>>> = Arc::new(Mutex::new(None));
     let clean_up = {
         let interval = timeout.clone();
         move || {
+            let mut interval = interval.lock().unwrap();
             if let Some(handle) = interval.take() {
                 handle.clear();
             }
@@ -17,13 +18,14 @@ pub(crate) fn use_timeout(func: impl Fn() -> Option<TimeoutHandle> + 'static) {
 
     on_cleanup(clean_up);
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
+        let mut timeout = timeout.lock().unwrap();
         if let Some(handle) = timeout.take() {
             handle.clear();
         }
 
         let result = func();
-        timeout.set(result);
+        *timeout = result;
 
         result
     });
