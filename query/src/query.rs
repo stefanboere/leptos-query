@@ -116,8 +116,10 @@ where
         &self,
         update_fn: impl FnOnce(QueryState<V>) -> Result<QueryState<V>, QueryState<V>>,
     ) -> bool {
-        let mut self_state = self.state.lock().unwrap();
-        let current_state = self_state.clone();
+        let current_state = {
+            let mut self_state = self.state.lock().unwrap();
+            self_state.clone()
+        };
 
         match update_fn(current_state) {
             Ok(new_state) => {
@@ -125,6 +127,7 @@ where
                 true
             }
             Err(old_state) => {
+                let mut self_state = self.state.lock().unwrap();
                 *self_state = old_state;
                 false
             }
