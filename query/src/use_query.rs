@@ -4,12 +4,11 @@ use crate::query_result::QueryResult;
 use crate::{
     query_is_suppressed, use_query_client, QueryOptions, QueryState, RefetchFn, ResourceOption,
 };
-// TODO use leptos::leptos_dom::HydrationCtx;
-use leptos::prelude::*;
 use leptos::logging;
+use leptos::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
-use serde::{Serialize, Deserialize};
 
 /// Creates a query. Useful for data fetching, caching, and synchronization with server state.
 ///
@@ -95,14 +94,11 @@ where
 
     let resource: Resource<ResourceData<V>> = {
         match options.resource_option.unwrap_or_default() {
-            ResourceOption::NonBlocking => Resource::new(
-                move || query.get(),
-                resource_fetcher,
-            ),
+            ResourceOption::NonBlocking => Resource::new(move || query.get(), resource_fetcher),
             ResourceOption::Blocking => {
                 Resource::new_blocking(move || query.get(), resource_fetcher)
             }
-            ResourceOption::Local => todo!() /* TODO, local resource has a different type now */
+            ResourceOption::Local => todo!(), /* TODO, local resource has a different type now */
         }
     };
 
@@ -119,8 +115,10 @@ where
     {
         let query = query.get_untracked();
 
-        if // TODO resource.loading().get_untracked() && !HydrationCtx::is_hydrating() &&
-             query.with_state(|state| matches!(state, QueryState::Created))
+        if
+        // TODO resource.loading().get_untracked()
+        !Owner::current_shared_context().map_or(false, |ctx| ctx.get_is_hydrating())
+            && query.with_state(|state| matches!(state, QueryState::Created))
         {
             query.execute()
         }
