@@ -103,9 +103,12 @@ where
     }
 
     pub fn update_state(&self, update_fn: impl FnOnce(&mut QueryState<V>)) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = {
+            let self_state = self.state.lock().unwrap();
+            self_state.clone()
+        };
         update_fn(&mut state);
-        self.set_state(state.clone());
+        self.set_state(state);
     }
 
     /// Be careful with this function. Used to avoid cloning.
@@ -117,7 +120,7 @@ where
         update_fn: impl FnOnce(QueryState<V>) -> Result<QueryState<V>, QueryState<V>>,
     ) -> bool {
         let current_state = {
-            let mut self_state = self.state.lock().unwrap();
+            let self_state = self.state.lock().unwrap();
             self_state.clone()
         };
 
