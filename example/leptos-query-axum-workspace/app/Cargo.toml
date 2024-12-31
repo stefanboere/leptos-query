@@ -19,6 +19,6 @@ thiserror.workspace = true
 
 [features]
 default = []
-hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate", "leptos_query/hydrate", "leptos_query_devtools/csr"]
+hydrate = ["leptos/hydrate", "leptos_query/hydrate", "leptos_query_devtools/csr"]
 ssr = ["leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr", "dep:leptos_axum", "leptos_query/ssr"]
 

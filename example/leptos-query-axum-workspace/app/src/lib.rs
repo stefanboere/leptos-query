@@ -5,8 +5,27 @@ use leptos_meta::*;
 use leptos_query::provide_query_client;
 use leptos_query_devtools::LeptosQueryDevtools;
 use leptos_router::*;
+use leptos_router::components::{Route, Router, Routes};
 
 pub mod error_template;
+
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <AutoReload options=options.clone() />
+                <HydrationScripts options/>
+                <MetaTags/>
+            </head>
+            <body>
+                <App/>
+            </body>
+        </html>
+    }
+}
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -23,14 +42,14 @@ pub fn App() -> impl IntoView {
         <LeptosQueryDevtools/>
 
         // content for this welcome page
-        <Router fallback=|| {
-            let mut outside_errors = Errors::default();
-            outside_errors.insert_with_default_key(AppError::NotFound);
-            view! { <ErrorTemplate outside_errors/> }.into_view()
-        }>
+        <Router>
             <main>
-                <Routes>
-                    <Route path="" view=HomePage/>
+                <Routes fallback=|| {
+                    let mut outside_errors = Errors::default();
+                    outside_errors.insert_with_default_key(AppError::NotFound);
+                    view! { <ErrorTemplate outside_errors/> }.into_view()
+                }>
+                    <Route path=path!("") view=HomePage/>
                 </Routes>
             </main>
         </Router>
