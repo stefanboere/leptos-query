@@ -234,8 +234,10 @@ where
      */
 
     pub fn execute(&self) {
-        let observers = self.observers.lock().expect("execute borrow");
-        let fetcher = observers.values().find_map(|f| f.get_fetcher());
+        let fetcher =  {
+            let observers = self.observers.lock().expect("execute borrow");
+            observers.values().find_map(|f| f.get_fetcher())
+        };
 
         if let Some(fetcher) = fetcher {
             if !query_is_suppressed() {
