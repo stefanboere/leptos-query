@@ -405,8 +405,11 @@ impl QueryClient {
                 }
                 None => {
                     if let Some(result) = updater(None) {
-                        let query = Owner::new_root(owner.shared_context()).with(|| Query::new(key));
-                        query.set_state(QueryState::Loaded(QueryData::now(result)));
+                        let query = owner.with(|| {
+                            let query = Query::new(key);
+                            query.set_state(QueryState::Loaded(QueryData::now(result)));
+                            query
+                        });
                         Some(query)
                     } else {
                         None
@@ -499,6 +502,7 @@ mod tests {
 
     #[test]
     fn update_query_data() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -538,6 +542,7 @@ mod tests {
 
     #[test]
     fn set_query_data_new_query() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -562,6 +567,7 @@ mod tests {
 
     #[test]
     fn set_query_data_existing_query() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -589,6 +595,7 @@ mod tests {
 
     #[test]
     fn can_use_same_key_with_different_value_types() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -601,6 +608,7 @@ mod tests {
 
     #[test]
     fn can_invalidate_while_subscribed() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -623,6 +631,7 @@ mod tests {
 
     #[test]
     fn can_invalidate_multiple() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -638,6 +647,7 @@ mod tests {
 
     #[test]
     fn can_invalidate_multiple_strings() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -657,6 +667,7 @@ mod tests {
 
     #[test]
     fn invalidate_all() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -697,6 +708,7 @@ mod tests {
 
     #[test]
     fn can_invalidate_subset() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 
@@ -720,6 +732,7 @@ mod tests {
 
     #[test]
     fn update_query_data_mut() {
+        Owner::new().set();
         provide_query_client();
         let client = use_query_client();
 

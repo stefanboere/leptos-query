@@ -258,6 +258,7 @@ mod tests {
 
     #[test]
     fn test_default() {
+        leptos::prelude::Owner::new().set();
         provide_query_client_with_options(DefaultQueryOptions {
             stale_time: Some(Duration::from_secs(1)),
             gc_time: Some(Duration::from_secs(2)),
