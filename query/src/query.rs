@@ -246,6 +246,21 @@ where
         }
     }
 
+    // Version of execute that does not use spawn_local, so we can properly call it on the first
+    // load. Couldn't get it to work with cancellation, so it is not cancellable
+    pub(crate) fn execute_initial(&self, wrapup: impl Fn() + Send + Sync + 'static) {
+        let fetcher =  {
+            let observers = self.observers.lock().expect("execute borrow");
+            observers.values().find_map(|f| f.get_fetcher())
+        };
+
+        if let Some(fetcher) = fetcher {
+            if !query_is_suppressed() {
+                execute_query_initial(self.clone(), move |k| fetcher(k), wrapup);
+            }
+        }
+    }
+
     // Only scenario where two requests can exist at the same time is the first is cancelled.
     pub fn new_execution(&self) -> Option<oneshot::Receiver<()>> {
         let mut current_request = self.current_request.lock().unwrap();
@@ -387,6 +402,62 @@ where
     }
 }
 
+fn execute_query_initial<K, V, Fu>(
+    query: Query<K, V>,
+    fetcher: impl Fn(K) -> Fu + Send + Sync + 'static,
+    wrapup: impl Fn() + Sync + Send + 'static
+) where
+    K: crate::QueryKey + 'static,
+    V: crate::QueryValue + 'static,
+    Fu: Future<Output = V> + Send + 'static,
+{
+    if !crate::query_is_suppressed() {
+        match query.new_execution() {
+            None => {}
+            Some(_) => {
+                match query.get_state() {
+                    // First load.
+                    QueryState::Created => {
+                        query.set_state(QueryState::Loading);
+                        let key = query.key.clone();
+                        let resource = Resource::new(|| (), move |_| fetcher(key.clone()));
+                        Effect::new_isomorphic(move |_| {
+                            match resource.get() {
+                                Some(data) => {
+                                    let data = QueryData::now(data);
+                                    query.set_state(QueryState::Loaded(data));
+                                    wrapup();
+                                }
+                                None => (),
+                            }
+                            query.finalize_execution();
+                        });
+                    }
+                    // Subsequent loads.
+                    QueryState::Loaded(data) | QueryState::Invalid(data) => {
+                        query.set_state(QueryState::Fetching(data));
+                        let key = query.key.clone();
+                        let resource = Resource::new(|| (), move |_| fetcher(key.clone()));
+                        Effect::new_isomorphic(move |_| {
+                            match resource.get() {
+                                Some(data) => {
+                                    let data = QueryData::now(data);
+                                    query.set_state(QueryState::Loaded(data));
+                                }
+                                None => (),
+                            }
+                            query.finalize_execution();
+                        });
+                    }
+                    QueryState::Loading | QueryState::Fetching(_) => {
+                        logging::debug_warn!("Query is already loading, this is likely a bug.");
+                        debug_assert!(false, "Query is already loading, this is likely a bug.");
+                    }
+                }
+            }
+        }
+    }
+}
 #[cfg(any(feature = "hydrate", feature = "csr"))]
 async fn execute_with_cancellation<V, Fu>(
     fut: Fu,

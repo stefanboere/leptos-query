@@ -9,6 +9,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
+use futures::stream::StreamExt;
 
 /// Creates a query. Useful for data fetching, caching, and synchronization with server state.
 ///
@@ -74,6 +75,8 @@ where
 
     let query_state = register_observer_handle_cleanup(fetcher, query, options.clone());
 
+    let (refetch, set_refetch) = signal(0);
+
     let resource_fetcher = move |query: Query<K, V>| {
         async move {
             match query.get_state() {
@@ -84,8 +87,9 @@ where
 
                 // Suspend indefinitely and wait for interruption.
                 QueryState::Created | QueryState::Loading => {
-                    let future = futures::future::pending();
-                    let () = future.await;
+                    if let Some(0) = refetch.to_stream().next().await {
+                        let _ = refetch.to_stream().next().await;
+                    }
                     ResourceData(None)
                 }
             }
@@ -115,12 +119,11 @@ where
     {
         let query = query.get_untracked();
 
-        if
-        // TODO resource.loading().get_untracked()
-        !Owner::current_shared_context().map_or(false, |ctx| ctx.get_is_hydrating())
-            && query.with_state(|state| matches!(state, QueryState::Created))
+        if query.with_state(|state| matches!(state, QueryState::Created))
         {
-            query.execute()
+            query.execute_initial(move || {
+                set_refetch.update(|n| *n += 1);
+            })
         }
     }
 
