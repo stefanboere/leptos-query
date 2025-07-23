@@ -1,3 +1,6 @@
+This fork is closed, I recommend using (leptos-fetch)[https://github.com/zakstucke/leptos-fetch] instead of this repo if you are using leptos 0.7 or higher. 
+It has almost all the same features, but is actually properly migrated to leptos 0.7.
+
 <!-- cargo-rdme start -->
 
 # Leptos Query
